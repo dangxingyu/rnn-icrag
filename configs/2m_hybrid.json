@@ -1,0 +1,8 @@
+{
+    "hidden_size": 128,
+    "num_hidden_layers": 14,
+    "state_size": 16,
+    "intermediate_size": 256,
+    "num_attention_heads": 4,
+    "max_position_embeddings": 4096
+}

@@ -1,0 +1,5 @@
+{
+    "hidden_size": 64,
+    "num_hidden_layers": 16,
+    "state_size": 16
+}
