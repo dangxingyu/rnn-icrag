@@ -40,7 +40,7 @@ python rnn/data.py \
 
 For training an RNN model, use:
 ```
-python3 rnn/train_upd.py \
+python3 rnn/train.py \
     --model_type rnn \
     --dataset_dir your_dataset_path \
     --output_dir your_output_path \
@@ -52,7 +52,7 @@ python3 rnn/train_upd.py \
 
 To train a Transformer model:
 ```
-python3 rnn/train_upd.py \
+python3 rnn/train.py \
     --model_type transformer \
     --dataset_dir your_dataset_path \
     --output_dir your_output_path \
@@ -64,7 +64,7 @@ python3 rnn/train_upd.py \
 
 To train a Hybrid model:
 ```
-python3 rnn/train_upd.py \
+python3 rnn/train.py \
     --model_type hybrid \
     --dataset_dir your_dataset_path \
     --output_dir your_output_path \
