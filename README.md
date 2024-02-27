@@ -88,4 +88,4 @@ python3 rnn/val.py \
     --batch_size 1
 ```
 
-In our experiments, we use `evaluate_through_generation` for the cot/icr task, focusing solely on the accuracy of the final results.
+In our experiments, we use `evaluate_through_generation` for the cot task, focusing solely on the accuracy of the final results.
