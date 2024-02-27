@@ -41,98 +41,12 @@ def evaluate(model, val_loader, args):
                 
             logits = logits[..., :-1, :].argmax(dim=-1)
             total_loss += loss.item()
-
             mask = labels[..., 1:] != -100
-            
-            # Compute accuracy per sample
             sample_acc = (logits == labels[..., 1:]) | ~mask  # True for correct predictions and ignored tokens
             sample_acc = sample_acc.all(dim=-1)  # Check if all tokens in a sample are correct/ignored
             total_correct_samples += sample_acc.sum().item()
             total_samples += labels.size(0)  # Count each sample in the batch
-
-    model.train()
     return total_loss / len(val_loader), total_correct_samples / total_samples
-
-def train(model, optimizer, scheduler, train_loader, val_loader, args):
-    model.train()
-    total_samples_processed = 0
-    step = 0
-    train_loss_accumulator = 0
-    train_acc_accumulator = 0
-    train_samples_accumulator = 0
-    best_val_acc = 0
-    train_losses = []
-    train_accs = []
-    val_accs = []
-    pbar = tqdm(total=(args.total_training_samples // args.batch_size))
-    criterion = nn.CrossEntropyLoss(ignore_index=-100)
-    while total_samples_processed < args.total_training_samples:
-        for batch in train_loader:
-            input_ids, attention_mask, labels = batch['input_ids'], batch['attention_mask'], batch['labels']
-            batch_size = input_ids.size(0)
-            if total_samples_processed + batch_size > args.total_training_samples:
-                break
-
-            # Forward and backward passes
-            model.zero_grad()
-            optimizer.zero_grad()
-            input_ids = input_ids.to(args.device)
-            attention_mask = attention_mask.to(args.device)
-            labels = labels.to(args.device)
-            if args.model_type == 'transformer':
-                outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-                logits = outputs.logits
-                loss = outputs.loss
-            else:
-                logits = model(input_ids)[0]
-                loss = criterion(logits[..., :-1, :].reshape(-1, logits.size(-1)), labels[..., 1:].reshape(-1))
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
-            train_loss_accumulator += loss.item()
-            logits = logits[..., :-1, :].detach().argmax(dim=-1)
-            mask = labels[..., 1:] != -100
-            correct_predictions = (logits == labels[..., 1:]) | ~mask
-            correct_predictions = correct_predictions.all(dim=-1).sum().item()
-            total_predictions = labels.size(0)
-            train_acc_accumulator += correct_predictions
-            train_samples_accumulator += total_predictions
-
-
-            # Log and evaluate at log_interval
-            if total_samples_processed % args.log_interval < batch_size or total_samples_processed + batch_size >= args.total_training_samples:
-                # from IPython import embed; embed()
-                train_acc = train_acc_accumulator / train_samples_accumulator if train_samples_accumulator > 0 else 0
-                train_loss = train_loss_accumulator / (step + 1)
-                val_loss, val_acc = evaluate(model, val_loader, args)
-                print(f'Step {step} | Samples {total_samples_processed} | Train acc: {train_acc} | Val loss: {val_loss} | Val acc: {val_acc}')
-                if val_acc > best_val_acc:
-                    torch.save(model.state_dict(), f'{args.output_dir}/model_best.pt')
-                    best_val_acc = val_acc
-                if args.report_to_wandb:
-                    wandb.log({"Step": step, "Train Loss": train_loss, "Train Accuracy": train_acc, "Validation Loss": val_loss, "Validation Accuracy": val_acc}, step=step)
-                train_losses.append(train_loss)
-                train_accs.append(train_acc)
-                val_accs.append(val_acc)
-
-                # Log metrics to wandb
-                # Reset training accumulators
-                train_loss_accumulator = 0
-                train_acc_accumulator = 0
-                train_samples_accumulator = 0
-
-            total_samples_processed += batch_size
-            step += 1
-            pbar.update(1)
-            if total_samples_processed >= args.total_training_samples:
-                break
-    pbar.close()
-    json.dump({
-        'train_losses': train_losses,
-        'train_accs': train_accs,
-        'val_accs': val_accs
-    }, open(f'{args.output_dir}/results.json', 'w'))
 
 def generate(model, input_ids, max_len, args):
     model.eval()
@@ -146,8 +60,6 @@ def generate(model, input_ids, max_len, args):
             outputs = torch.cat([outputs, next_token.reshape(1,1)], dim=1)
     outputs = outputs[:, input_ids.size(1):]
     return outputs
-
-
 
 @torch.no_grad()
 def evaluate_through_generation(model, val_loader, val_dataset, args):
@@ -165,7 +77,6 @@ def evaluate_through_generation(model, val_loader, val_dataset, args):
         else:
             real_input_ids = input_ids
 
-        # generated = generate(model, real_input_ids, input_ids.size(1) + 30 - real_input_ids.size(1), args)
         if args.model_type == 'transformer':
             generated = model.generate(real_input_ids, max_length=input_ids.size(1) + 1, do_sample=False, num_return_sequences=1, eos_token_id=val_dataset.vocab['[TRUE]'], pad_token_id=val_dataset.vocab['[PAD]'])
         else:
@@ -189,7 +100,6 @@ def evaluate_through_generation(model, val_loader, val_dataset, args):
         total_samples += 1
 
         print(f'Accuracy: {total_correct_samples / total_samples}')
-    model.train()
     print(f'Accuracy: {total_correct_samples / total_samples}')
     return total_correct_samples / total_samples
 
@@ -260,20 +170,12 @@ def main():
                 num_hidden_layers=9
             )
     model = model.to(device=args.device, dtype=torch.float32)
-    # if(args.model_dir):
-    #     state_dict = torch.load(os.path.join(args.model_dir, 'model_best.pt'))
-    #     new_state_dict = {}
-    #     for key in state_dict:
-    #         if(key.startswith('module.')):
-    #             new_state_dict[key[7:]] = state_dict[key]
-    #         else:
-    #             new_state_dict[key] = state_dict[key]
-    #     model.load_state_dict(new_state_dict)
     print(model)
     model = model.from_pretrained(args.model_dir)
     model.lm_head.weight = model.model.embed_tokens.weight
     model = model.to(device=args.device, dtype=torch.float32)
     val_acc = evaluate(model, val_loader, args)
+    # val_acc = evaluate_through_generation(model, val_loader, val_dataset, args)
     print(f'Initial | val acc: {val_acc}')
     if(args.model_dir):
         json.dump({
