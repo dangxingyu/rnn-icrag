@@ -144,8 +144,7 @@ class HybridMixerModel(nn.Module):
                 **(initializer_cfg if initializer_cfg is not None else {}),
             )
         )
-        self.attention = LlamaDecoderLayer(llama_cfg)
-
+        self.attention = LlamaDecoderLayer(llama_cfg, layer_idx = 0)
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
         return {
             i: layer.allocate_inference_cache(batch_size, max_seqlen, dtype=dtype, **kwargs)
@@ -174,7 +173,10 @@ class HybridMixerModel(nn.Module):
                 prenorm=False,
                 residual_in_fp32=self.residual_in_fp32,
             )
-        hidden_states = torch.cat(self.attention(hidden_states))
+        position_ids = torch.arange(hidden_states.size(1), device=hidden_states.device).unsqueeze(0)
+        attention_mask = torch.triu(torch.ones((hidden_states.size(1), hidden_states.size(1)), device=hidden_states.device), diagonal=1) * -100
+        attention_mask = attention_mask.unsqueeze(0).unsqueeze(0)
+        hidden_states = torch.cat(self.attention(hidden_states, position_ids =  position_ids, attention_mask = attention_mask))
         return hidden_states
 
 
